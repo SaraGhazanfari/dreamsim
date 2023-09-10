@@ -63,7 +63,9 @@ def model_wrapper(img_0, img_1, model):
     def metric_model(img_ref):
         dist_0 = model(img_ref, img_0)
         dist_1 = model(img_ref, img_1)
-        return dist_0 > dist_1
+        if dist_0 > dist_1:
+            return 1
+        return 0
 
     return metric_model
 

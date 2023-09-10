@@ -101,8 +101,8 @@ def score_nights_dataset(model, test_loader, device, attack_type):
         img_ref, img_left, img_right, target = img_ref.to(device), img_left.to(device), \
             img_right.to(device), target.to(device)
         if attack_type:
-            img_ref = generate_attack(attack_type=attack_type, model=model, img_ref=img_ref, img_left=img_left,
-                                      img_right=img_right, target=target)
+            img_ref = generate_attack(attack_type=attack_type, model=model, img_ref=img_ref, img_0=img_left,
+                                      img_1=img_right, target=target)
         dist_0 = model(img_ref, img_left)
         dist_1 = model(img_ref, img_right)
 

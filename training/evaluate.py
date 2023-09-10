@@ -1,20 +1,22 @@
 from pytorch_lightning import seed_everything
 import torch
+import torch.nn as nn
 from dataset.dataset import TwoAFCDataset
 from util.utils import get_preprocess
 from torch.utils.data import DataLoader
 import os
 import yaml
 import logging
-from train import LightningPerceptualModel
+from training.train import LightningPerceptualModel
 from torchmetrics.functional import structural_similarity_index_measure, peak_signal_noise_ratio
 from DISTS_pytorch import DISTS
-from dreamsim import PerceptualModel
+from dreamsim import PerceptualModel, dreamsim
 from tqdm import tqdm
 import pickle
 import configargparse
 from dreamsim import dreamsim
-
+from advertorch.attacks import L2PGDAttack, LinfPGDAttack
+from util.train_utils import HingeLoss
 log = logging.getLogger("lightning.pytorch")
 log.propagate = False
 log.setLevel(logging.ERROR)
@@ -52,33 +54,39 @@ def parse_args():
     parser.add_argument('--nights_root', type=str, default='./dataset/nights', help='path to nights dataset.')
     parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--batch_size', type=int, default=4, help='dataset batch size.')
-
+    parser.add_argument('--attack_type', type=str, default=None, help='attack type L2, Linf')
     return parser.parse_args()
 
 
-def score_nights_dataset(model, test_loader, device):
+def score_nights_dataset(model, test_loader, device, attack_type):
     logging.info("Evaluating NIGHTS dataset.")
     d0s = []
     d1s = []
     targets = []
-    with torch.no_grad():
-        for i, (img_ref, img_left, img_right, target, idx) in tqdm(enumerate(test_loader), total=len(test_loader)):
-            img_ref, img_left, img_right, target = img_ref.to(device), img_left.to(device), \
+    if attack_type == 'L2':
+        adversary = L2PGDAttack(model.embed, loss_fn=nn.MSELoss(), eps=1.0,nb_iter=200, rand_init=True,
+        targeted=False, eps_iter=0.01, clip_min=0.0, clip_max=1.0)
+    elif attack_type == 'Linf':
+        adversary = LinfPGDAttack(model.embed, loss_fn=nn.MSELoss(), eps=0.03, nb_iter=50,
+             eps_iter=0.01, rand_init=True, clip_min=0., clip_max=1.,  targeted=False)
+    #with torch.no_grad():
+    for i, (img_ref, img_left, img_right, target, idx) in tqdm(enumerate(test_loader), total=len(test_loader)):
+        img_ref, img_left, img_right, target = img_ref.to(device), img_left.to(device), \
                 img_right.to(device), target.to(device)
-
-            dist_0 = model(img_ref, img_left)
-            dist_1 = model(img_ref, img_right)
-
-            if len(dist_0.shape) < 1:
-                dist_0 = dist_0.unsqueeze(0)
-                dist_1 = dist_1.unsqueeze(0)
-            dist_0 = dist_0.unsqueeze(1)
-            dist_1 = dist_1.unsqueeze(1)
-            target = target.unsqueeze(1)
-
-            d0s.append(dist_0)
-            d1s.append(dist_1)
-            targets.append(target)
+        if attack_type:
+            img_ref = adversary(img_ref, model.embed(img_ref))
+        dist_0 = model(img_ref, img_left)
+        dist_1 = model(img_ref, img_right)
+            
+        if len(dist_0.shape) < 1:
+            dist_0 = dist_0.unsqueeze(0)
+            dist_1 = dist_1.unsqueeze(0)
+        dist_0 = dist_0.unsqueeze(1)
+        dist_1 = dist_1.unsqueeze(1)
+        target = target.unsqueeze(1)
+        d0s.append(dist_0)
+        d1s.append(dist_1)
+        targets.append(target)
 
     d0s = torch.cat(d0s, dim=0)
     d1s = torch.cat(d1s, dim=0)
@@ -119,8 +127,9 @@ def get_baseline_model(baseline_model, feat_type: str = "cls", stride: str = "16
         return lpips_func
 
     elif 'clip' in baseline_model or 'dino' in baseline_model or "open_clip" in baseline_model or "mae" in baseline_model:
-        perceptual_model = PerceptualModel(feat_type=feat_type, model_type=baseline_model, stride=stride,
-                                           baseline=True, load_dir=load_dir, device=device)
+        perceptual_model, _ = dreamsim(pretrained=True, dreamsim_type=args.baseline_model)
+        #PerceptualModel(feat_type=feat_type, model_type=baseline_model, stride=stride,
+        #                                   baseline=True, load_dir=load_dir, device=device)
         for extractor in perceptual_model.extractor_list:
             extractor.model.eval()
         return perceptual_model
@@ -189,11 +198,13 @@ def run(args, device):
     test_no_imagenet_loader = DataLoader(test_dataset_no_imagenet, batch_size=args.batch_size,
                                          num_workers=args.num_workers, shuffle=False)
 
-    imagenet_score = score_nights_dataset(model, test_imagenet_loader, device)
-    no_imagenet_score = score_nights_dataset(model, test_no_imagenet_loader, device)
+    imagenet_score = score_nights_dataset(model, test_imagenet_loader, device, args.attack_type)
+    no_imagenet_score = score_nights_dataset(model, test_no_imagenet_loader, device, args.attack_type)
 
     eval_results['nights_imagenet'] = imagenet_score.item()
+    logging.info(f"Imagenet 2AFC score: {str(eval_results['nights_imagenet'])}")
     eval_results['nights_no_imagenet'] = no_imagenet_score.item()
+    logging.info(f"No Imagenet 2AFC score: {str(eval_results['nights_no_imagenet'])}")
     eval_results['nights_total'] = (imagenet_score.item() * len(test_dataset_imagenet) +
                                     no_imagenet_score.item() * len(test_dataset_no_imagenet)) / total_length
     logging.info(f"Combined 2AFC score: {str(eval_results['nights_total'])}")

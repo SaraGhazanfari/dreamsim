@@ -86,6 +86,7 @@ class PerceptualModel(torch.nn.Module):
         return embed
 
     def _validate_args(self):
+        print(len(self.model_list), len(self.feat_type_list), len(self.stride_list))
         assert len(self.model_list) == len(self.feat_type_list) == len(self.stride_list)
         for model_type, feat_type, stride in zip(self.model_list, self.feat_type_list, self.stride_list):
             if feat_type == "embedding" and ("dino" in model_type or "mae" in model_type):
@@ -212,7 +213,7 @@ def dreamsim(pretrained: bool = True, device="cuda", cache_dir="./models", norma
     # initialize PerceptualModel and load weights
     model_list = dreamsim_args['model_config'][dreamsim_type]['model_type'].split(",")
     ours_model = PerceptualModel(**dreamsim_args['model_config'][dreamsim_type], device=device, load_dir=cache_dir,
-                                 normalize_embeds=normalize_embeds)
+                                 normalize_embeds=normalize_embeds) #**dreamsim_args['model_config'][dreamsim_type]
     for extractor in ours_model.extractor_list:
         lora_config = LoraConfig(**dreamsim_args['lora_config'])
         model = get_peft_model(ViTModel(extractor.model, ViTConfig()), lora_config)

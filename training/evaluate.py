@@ -16,7 +16,8 @@ import pickle
 import configargparse
 from dreamsim import dreamsim
 from advertorch.attacks import L2PGDAttack, LinfPGDAttack
-from util.train_utils import HingeLoss
+from autoattack import AutoAttack
+
 log = logging.getLogger("lightning.pytorch")
 log.propagate = False
 log.setLevel(logging.ERROR)
@@ -48,14 +49,45 @@ def parse_args():
     parser.add_argument('--baseline_stride', type=str,
                         help='Stride of first convolution layer the model (should match patch size). If finetuning'
                              'an ensemble, pass a comma-separated list (same length as model_type).')
-    parser.add_argument('--baseline_output_path', type=str,  help='Path to save evaluation results.')
+    parser.add_argument('--baseline_output_path', type=str, help='Path to save evaluation results.')
 
     ## Dataset options
     parser.add_argument('--nights_root', type=str, default='./dataset/nights', help='path to nights dataset.')
     parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--batch_size', type=int, default=4, help='dataset batch size.')
-    parser.add_argument('--attack_type', type=str, default=None, help='attack type L2, Linf')
+    parser.add_argument('--attack_type', type=str, default=None, help='PGD-L2, PGD-Linf, AA-L2, AA-Linf')
     return parser.parse_args()
+
+
+def model_wrapper(img_0, img_1, model):
+    def metric_model(img_ref):
+        dist_0 = model(img_ref, img_0)
+        dist_1 = model(img_ref, img_1)
+        return dist_0 > dist_1
+
+    return metric_model
+
+
+def generate_attack(attack_type, model, img_ref, img_0, img_1, target):
+    attack_method, attack_norm = attack_type.split('-')
+    epsilon_dict = {'Linf': 0.03,
+                    'L2': 1.0}
+    epsilon = epsilon_dict[attack_norm]
+    if attack_type == 'AA':
+        adversary = AutoAttack(model_wrapper(img_0, img_1, model), norm=attack_norm, eps=epsilon, version='standard')
+        img_ref = adversary.run_standard_evaluation(img_ref, target, bs=img_ref.shape)
+    elif attack_type == 'PGD':
+        if attack_type == 'L2':
+            adversary = L2PGDAttack(model.embed, loss_fn=nn.MSELoss(), eps=epsilon, nb_iter=200, rand_init=True,
+                                    targeted=False, eps_iter=0.01, clip_min=0.0, clip_max=1.0)
+
+        else:  # attack_type == 'Linf':
+            adversary = LinfPGDAttack(model.embed, loss_fn=nn.MSELoss(), eps=epsilon, nb_iter=50,
+                                      eps_iter=0.01, rand_init=True, clip_min=0., clip_max=1., targeted=False)
+
+        img_ref = adversary(img_ref, model.embed(img_ref))
+
+    return img_ref
 
 
 def score_nights_dataset(model, test_loader, device, attack_type):
@@ -63,21 +95,17 @@ def score_nights_dataset(model, test_loader, device, attack_type):
     d0s = []
     d1s = []
     targets = []
-    if attack_type == 'L2':
-        adversary = L2PGDAttack(model.embed, loss_fn=nn.MSELoss(), eps=1.0,nb_iter=200, rand_init=True,
-        targeted=False, eps_iter=0.01, clip_min=0.0, clip_max=1.0)
-    elif attack_type == 'Linf':
-        adversary = LinfPGDAttack(model.embed, loss_fn=nn.MSELoss(), eps=0.03, nb_iter=50,
-             eps_iter=0.01, rand_init=True, clip_min=0., clip_max=1.,  targeted=False)
-    #with torch.no_grad():
+
+    # with torch.no_grad():
     for i, (img_ref, img_left, img_right, target, idx) in tqdm(enumerate(test_loader), total=len(test_loader)):
         img_ref, img_left, img_right, target = img_ref.to(device), img_left.to(device), \
-                img_right.to(device), target.to(device)
+            img_right.to(device), target.to(device)
         if attack_type:
-            img_ref = adversary(img_ref, model.embed(img_ref))
+            img_ref = generate_attack(attack_type=attack_type, model=model, img_ref=img_ref, img_left=img_left,
+                                      img_right=img_right, target=target)
         dist_0 = model(img_ref, img_left)
         dist_1 = model(img_ref, img_right)
-            
+
         if len(dist_0.shape) < 1:
             dist_0 = dist_0.unsqueeze(0)
             dist_1 = dist_1.unsqueeze(0)
@@ -102,11 +130,13 @@ def get_baseline_model(baseline_model, feat_type: str = "cls", stride: str = "16
     if baseline_model == 'psnr':
         def psnr_func(im1, im2):
             return -peak_signal_noise_ratio(im1, im2, data_range=1.0, dim=(1, 2, 3), reduction='none')
+
         return psnr_func
 
     elif baseline_model == 'ssim':
         def ssim_func(im1, im2):
             return -structural_similarity_index_measure(im1, im2, data_range=1.0, reduction='none')
+
         return ssim_func
 
     elif baseline_model == 'dists':
@@ -115,6 +145,7 @@ def get_baseline_model(baseline_model, feat_type: str = "cls", stride: str = "16
         def dists_func(im1, im2):
             distances = dists_metric(im1, im2)
             return distances
+
         return dists_func
 
     elif baseline_model == 'lpips':
@@ -124,11 +155,12 @@ def get_baseline_model(baseline_model, feat_type: str = "cls", stride: str = "16
         def lpips_func(im1, im2):
             distances = lpips_fn(im1.to(device), im2.to(device)).reshape(-1)
             return distances
+
         return lpips_func
 
     elif 'clip' in baseline_model or 'dino' in baseline_model or "open_clip" in baseline_model or "mae" in baseline_model:
         perceptual_model, _ = dreamsim(pretrained=True, dreamsim_type=args.baseline_model)
-        #PerceptualModel(feat_type=feat_type, model_type=baseline_model, stride=stride,
+        # PerceptualModel(feat_type=feat_type, model_type=baseline_model, stride=stride,
         #                                   baseline=True, load_dir=load_dir, device=device)
         for extractor in perceptual_model.extractor_list:
             extractor.model.eval()

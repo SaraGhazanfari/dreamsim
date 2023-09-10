@@ -18,3 +18,5 @@ torchmetrics
 torchvision
 tqdm
 transformers
+git+https://github.com/BorealisAI/advertorch.git
+git+https://github.com/fra31/auto-attack

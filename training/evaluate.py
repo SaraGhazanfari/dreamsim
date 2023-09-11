@@ -63,7 +63,8 @@ def model_wrapper(model):
     soft_max = nn.Softmax(dim=1)
 
     def metric_model(img):
-        img_ref, img_0, img_1 = img[:, 0, :, :], img[:, 1, :, :], img[:, 2, :, :]
+        img_ref, img_0, img_1 = img[:, 0, :, :].squeeze(), img[:, 1, :, :].squeeze(), img[:, 2, :, :].squeeze()
+        print(img_ref.shape, img_0.shape, img_1.shape)
         dist_0 = model(img_ref, img_0)
         dist_1 = model(img_ref, img_1)
         return torch.stack((dist_1, dist_0), dim=1)
@@ -77,12 +78,11 @@ def generate_attack(attack_type, model, img_ref, img_0, img_1, target):
                     'L2': 1.0}
 
     epsilon = epsilon_dict[attack_norm]
-    print()
     if attack_method == 'AA':
         adversary = AutoAttack(model_wrapper(model), norm=attack_norm, eps=epsilon, version='standard')
+        adversary.attacks_to_run = ['apgd-ce']
         img_ref = adversary.run_standard_evaluation(torch.stack((img_ref, img_0, img_1), dim=1), target,
                                                     bs=img_ref.shape[0])
-        print('target ', target)
     elif attack_method == 'PGD':
         if attack_norm == 'L2':
             adversary = L2PGDAttack(model.embed, loss_fn=nn.MSELoss(), eps=epsilon, nb_iter=200, rand_init=True,

@@ -60,14 +60,11 @@ def parse_args():
 
 
 def model_wrapper(img_0, img_1, model):
+    soft_max = nn.Softmax(dim=1)
     def metric_model(img_ref):
         dist_0 = model(img_ref, img_0)
         dist_1 = model(img_ref, img_1)
-        if dist_0 > dist_1:
-            print(1)
-            return 1
-        print(0)
-        return 0
+        return torch.stack((dist_1, dist_0), dim=1)
 
     return metric_model
 
@@ -76,13 +73,15 @@ def generate_attack(attack_type, model, img_ref, img_0, img_1, target):
     attack_method, attack_norm = attack_type.split('-')
     epsilon_dict = {'Linf': 0.03,
                     'L2': 1.0}
+    
     epsilon = epsilon_dict[attack_norm]
-    if attack_type == 'AA':
+    print()
+    if attack_method == 'AA':
         adversary = AutoAttack(model_wrapper(img_0, img_1, model), norm=attack_norm, eps=epsilon, version='standard')
-        img_ref = adversary.run_standard_evaluation(img_ref, target, bs=img_ref.shape)
+        img_ref = adversary.run_standard_evaluation(img_ref, target, bs=img_ref.shape[0])
         print('target ', target)
-    elif attack_type == 'PGD':
-        if attack_type == 'L2':
+    elif attack_method == 'PGD':
+        if attack_norm == 'L2':
             adversary = L2PGDAttack(model.embed, loss_fn=nn.MSELoss(), eps=epsilon, nb_iter=200, rand_init=True,
                                     targeted=False, eps_iter=0.01, clip_min=0.0, clip_max=1.0)
 

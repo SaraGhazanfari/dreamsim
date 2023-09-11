@@ -59,9 +59,11 @@ def parse_args():
     return parser.parse_args()
 
 
-def model_wrapper(img_0, img_1, model):
+def model_wrapper(model):
     soft_max = nn.Softmax(dim=1)
-    def metric_model(img_ref):
+
+    def metric_model(img):
+        img_ref, img_0, img_1 = img[:, 0, :, :], img[:, 1, :, :], img[:, 2, :, :]
         dist_0 = model(img_ref, img_0)
         dist_1 = model(img_ref, img_1)
         return torch.stack((dist_1, dist_0), dim=1)
@@ -73,12 +75,13 @@ def generate_attack(attack_type, model, img_ref, img_0, img_1, target):
     attack_method, attack_norm = attack_type.split('-')
     epsilon_dict = {'Linf': 0.03,
                     'L2': 1.0}
-    
+
     epsilon = epsilon_dict[attack_norm]
     print()
     if attack_method == 'AA':
-        adversary = AutoAttack(model_wrapper(img_0, img_1, model), norm=attack_norm, eps=epsilon, version='standard')
-        img_ref = adversary.run_standard_evaluation(img_ref, target, bs=img_ref.shape[0])
+        adversary = AutoAttack(model_wrapper(model), norm=attack_norm, eps=epsilon, version='standard')
+        img_ref = adversary.run_standard_evaluation(torch.stack((img_ref, img_0, img_1), dim=1), target,
+                                                    bs=img_ref.shape[0])
         print('target ', target)
     elif attack_method == 'PGD':
         if attack_norm == 'L2':

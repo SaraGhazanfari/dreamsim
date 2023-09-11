@@ -64,7 +64,9 @@ def model_wrapper(img_0, img_1, model):
         dist_0 = model(img_ref, img_0)
         dist_1 = model(img_ref, img_1)
         if dist_0 > dist_1:
+            print(1)
             return 1
+        print(0)
         return 0
 
     return metric_model
@@ -78,6 +80,7 @@ def generate_attack(attack_type, model, img_ref, img_0, img_1, target):
     if attack_type == 'AA':
         adversary = AutoAttack(model_wrapper(img_0, img_1, model), norm=attack_norm, eps=epsilon, version='standard')
         img_ref = adversary.run_standard_evaluation(img_ref, target, bs=img_ref.shape)
+        print('target ', target)
     elif attack_type == 'PGD':
         if attack_type == 'L2':
             adversary = L2PGDAttack(model.embed, loss_fn=nn.MSELoss(), eps=epsilon, nb_iter=200, rand_init=True,

@@ -56,6 +56,7 @@ def parse_args():
     parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--batch_size', type=int, default=4, help='dataset batch size.')
     parser.add_argument('--attack_type', type=str, default=None, help='PGD-L2, PGD-Linf, AA-L2, AA-Linf')
+    parser.add_argument('--eps', type=int, default=0, help='epsilon for attack')
     return parser.parse_args()
 
 
@@ -63,8 +64,7 @@ def model_wrapper(model):
     soft_max = nn.Softmax(dim=1)
 
     def metric_model(img):
-        img_ref, img_0, img_1 = img[:, 0, :, :].squeeze(), img[:, 1, :, :].squeeze(), img[:, 2, :, :].squeeze()
-        print(img_ref.shape, img_0.shape, img_1.shape)
+        img_ref, img_0, img_1 = img[:, 0, :, :].squeeze(1), img[:, 1, :, :].squeeze(1), img[:, 2, :, :].squeeze(1)
         dist_0 = model(img_ref, img_0)
         dist_1 = model(img_ref, img_1)
         return torch.stack((dist_1, dist_0), dim=1)
@@ -72,17 +72,15 @@ def model_wrapper(model):
     return metric_model
 
 
-def generate_attack(attack_type, model, img_ref, img_0, img_1, target):
+def generate_attack(attack_type, model, img_ref, img_0, img_1, target, epsilon):
     attack_method, attack_norm = attack_type.split('-')
-    epsilon_dict = {'Linf': 0.03,
-                    'L2': 1.0}
 
-    epsilon = epsilon_dict[attack_norm]
     if attack_method == 'AA':
         adversary = AutoAttack(model_wrapper(model), norm=attack_norm, eps=epsilon, version='standard')
         adversary.attacks_to_run = ['apgd-ce']
-        img_ref = adversary.run_standard_evaluation(torch.stack((img_ref, img_0, img_1), dim=1), target,
-                                                    bs=img_ref.shape[0])
+        img_ref = adversary.run_standard_evaluation(torch.stack((img_ref, img_0, img_1), dim=1), target.long(),
+                bs=img_ref.shape[0])
+        img_ref = img_ref[:, 0, :, :].squeeze(1)
     elif attack_method == 'PGD':
         if attack_norm == 'L2':
             adversary = L2PGDAttack(model.embed, loss_fn=nn.MSELoss(), eps=epsilon, nb_iter=200, rand_init=True,
@@ -97,7 +95,7 @@ def generate_attack(attack_type, model, img_ref, img_0, img_1, target):
     return img_ref
 
 
-def score_nights_dataset(model, test_loader, device, attack_type):
+def score_nights_dataset(model, test_loader, device, attack_type, epsilon=0):
     logging.info("Evaluating NIGHTS dataset.")
     d0s = []
     d1s = []
@@ -109,7 +107,7 @@ def score_nights_dataset(model, test_loader, device, attack_type):
             img_right.to(device), target.to(device)
         if attack_type:
             img_ref = generate_attack(attack_type=attack_type, model=model, img_ref=img_ref, img_0=img_left,
-                                      img_1=img_right, target=target)
+                                      img_1=img_right, target=target, epsilon=epsilon)
         dist_0 = model(img_ref, img_left)
         dist_1 = model(img_ref, img_right)
 
@@ -237,8 +235,8 @@ def run(args, device):
     test_no_imagenet_loader = DataLoader(test_dataset_no_imagenet, batch_size=args.batch_size,
                                          num_workers=args.num_workers, shuffle=False)
 
-    imagenet_score = score_nights_dataset(model, test_imagenet_loader, device, args.attack_type)
-    no_imagenet_score = score_nights_dataset(model, test_no_imagenet_loader, device, args.attack_type)
+    imagenet_score = score_nights_dataset(model, test_imagenet_loader, device, args.attack_type, float(args.eps))
+    no_imagenet_score = score_nights_dataset(model, test_no_imagenet_loader, device, args.attack_type, float(args.eps))
 
     eval_results['nights_imagenet'] = imagenet_score.item()
     logging.info(f"Imagenet 2AFC score: {str(eval_results['nights_imagenet'])}")

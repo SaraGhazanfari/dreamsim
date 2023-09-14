@@ -96,6 +96,16 @@ def generate_attack(attack_type, model, img_ref, img_0, img_1, target, epsilon):
     return img_ref
 
 
+def calculate_twoafc_score(d0s, d1s, targets):
+    d0s = torch.cat(d0s, dim=0)
+    d1s = torch.cat(d1s, dim=0)
+    targets = torch.cat(targets, dim=0)
+    scores = (d0s < d1s) * (1.0 - targets) + (d1s < d0s) * targets + (d1s == d0s) * 0.5
+    twoafc_score = torch.mean(scores, dim=0)
+    print(twoafc_score)
+    return twoafc_score
+
+
 def score_nights_dataset(model, test_loader, device, attack_type, epsilon=0):
     logging.info("Evaluating NIGHTS dataset.")
     d0s = []
@@ -121,12 +131,9 @@ def score_nights_dataset(model, test_loader, device, attack_type, epsilon=0):
         d0s.append(dist_0)
         d1s.append(dist_1)
         targets.append(target)
+        calculate_twoafc_score(d0s, d1s, targets)
 
-    d0s = torch.cat(d0s, dim=0)
-    d1s = torch.cat(d1s, dim=0)
-    targets = torch.cat(targets, dim=0)
-    scores = (d0s < d1s) * (1.0 - targets) + (d1s < d0s) * targets + (d1s == d0s) * 0.5
-    twoafc_score = torch.mean(scores, dim=0)
+    twoafc_score = calculate_twoafc_score(d0s, d1s, targets)
     logging.info(f"2AFC score: {str(twoafc_score)}")
     return twoafc_score
 

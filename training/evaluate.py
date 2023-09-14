@@ -76,12 +76,11 @@ def generate_attack(attack_type, model, img_ref, img_0, img_1, target, epsilon):
     attack_method, attack_norm = attack_type.split('-')
 
     if attack_method == 'AA':
-        img_0.requires_grad, img_1.requires_grad = False, False
         adversary = AutoAttack(model_wrapper(model), norm=attack_norm, eps=epsilon, version='standard')
         adversary.attacks_to_run = ['apgd-ce']
         img_ref = adversary.run_standard_evaluation(torch.stack((img_ref, img_0, img_1), dim=1), target.long(),
                                                     bs=img_ref.shape[0])
-        img_ref = img_ref[:, 0, :, :].squeeze(1)
+        img_ref, img_0, img_1 = img_ref[:, 0, :, :].squeeze(1), img_ref[:, 1, :, :].squeeze(1), img_ref[:, 2, :, :].squeeze(1)
     elif attack_method == 'PGD':
         if attack_norm == 'L2':
             adversary = L2PGDAttack(model.embed, loss_fn=nn.MSELoss(), eps=epsilon, nb_iter=200, rand_init=True,
@@ -93,7 +92,7 @@ def generate_attack(attack_type, model, img_ref, img_0, img_1, target, epsilon):
 
         img_ref = adversary(img_ref, model.embed(img_ref))
 
-    return img_ref
+    return img_ref, img_0, img_1
 
 
 def calculate_twoafc_score(d0s, d1s, targets):
@@ -116,8 +115,10 @@ def score_nights_dataset(model, test_loader, device, attack_type, epsilon=0):
     for i, (img_ref, img_left, img_right, target, idx) in tqdm(enumerate(test_loader), total=len(test_loader)):
         img_ref, img_left, img_right, target = img_ref.to(device), img_left.to(device), \
             img_right.to(device), target.to(device)
+        img_left = img_left.detach()
+        img_right = img_right.detach()
         if attack_type:
-            img_ref = generate_attack(attack_type=attack_type, model=model, img_ref=img_ref, img_0=img_left,
+            img_ref, _, _ = generate_attack(attack_type=attack_type, model=model, img_ref=img_ref, img_0=img_left,
                                       img_1=img_right, target=target, epsilon=epsilon)
         dist_0 = model(img_ref, img_left)
         dist_1 = model(img_ref, img_right)
@@ -128,9 +129,9 @@ def score_nights_dataset(model, test_loader, device, attack_type, epsilon=0):
         dist_0 = dist_0.unsqueeze(1)
         dist_1 = dist_1.unsqueeze(1)
         target = target.unsqueeze(1)
-        d0s.append(dist_0)
-        d1s.append(dist_1)
-        targets.append(target)
+        d0s.append(dist_0.detach())
+        d1s.append(dist_1.detach())
+        targets.append(target.detach())
         calculate_twoafc_score(d0s, d1s, targets)
 
     twoafc_score = calculate_twoafc_score(d0s, d1s, targets)

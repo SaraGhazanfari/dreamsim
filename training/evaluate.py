@@ -76,10 +76,11 @@ def generate_attack(attack_type, model, img_ref, img_0, img_1, target, epsilon):
     attack_method, attack_norm = attack_type.split('-')
 
     if attack_method == 'AA':
+        img_0.requires_grad, img_1.requires_grad = False, False
         adversary = AutoAttack(model_wrapper(model), norm=attack_norm, eps=epsilon, version='standard')
         adversary.attacks_to_run = ['apgd-ce']
         img_ref = adversary.run_standard_evaluation(torch.stack((img_ref, img_0, img_1), dim=1), target.long(),
-                bs=img_ref.shape[0])
+                                                    bs=img_ref.shape[0])
         img_ref = img_ref[:, 0, :, :].squeeze(1)
     elif attack_method == 'PGD':
         if attack_norm == 'L2':

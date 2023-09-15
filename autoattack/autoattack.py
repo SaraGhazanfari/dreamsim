@@ -217,6 +217,7 @@ class AutoAttack():
                     
                     else:
                         raise ValueError('Attack not supported')
+
                     output = self.get_logits(adv_curr).max(dim=1)[1]
                     false_batch = ~y.eq(output).to(robust_flags.device)
                     non_robust_lin_idcs = batch_datapoint_idcs[false_batch]

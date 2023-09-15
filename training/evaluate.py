@@ -76,7 +76,6 @@ def generate_attack(attack_type, model, img_ref, img_0, img_1, target, epsilon):
     if attack_method == 'AA':
         adversary = AutoAttack(model_wrapper(model), norm=attack_norm, eps=epsilon, version='standard')
         adversary.attacks_to_run = ['apgd-ce']
-        print(img_0.requires_grad, 'generate_attack')
         img_ref = adversary.run_standard_evaluation(torch.stack((img_ref, img_0, img_1), dim=1), target.long(),
                                                     bs=img_ref.shape[0])
         img_ref, img_0, img_1 = img_ref[:, 0, :, :].squeeze(1), img_ref[:, 1, :, :].squeeze(1), img_ref[:, 2, :, :].squeeze(1)
@@ -100,7 +99,7 @@ def calculate_twoafc_score(d0s, d1s, targets):
     targets = torch.cat(targets, dim=0)
     scores = (d0s < d1s) * (1.0 - targets) + (d1s < d0s) * targets + (d1s == d0s) * 0.5
     twoafc_score = torch.mean(scores, dim=0)
-    print(twoafc_score)
+    logging.info(f"2AFC score: {str(twoafc_score)}")
     return twoafc_score
 
 
@@ -116,7 +115,6 @@ def score_nights_dataset(model, test_loader, device, attack_type, epsilon=0):
             img_right.to(device), target.to(device)
         img_left = img_left.detach()
         img_right = img_right.detach()
-        print(img_left.requires_grad, 'score_nights_dataset')
         if attack_type:
             img_ref, _, _ = generate_attack(attack_type=attack_type, model=model, img_ref=img_ref, img_0=img_left,
                                       img_1=img_right, target=target, epsilon=epsilon)
@@ -135,7 +133,7 @@ def score_nights_dataset(model, test_loader, device, attack_type, epsilon=0):
         calculate_twoafc_score(d0s, d1s, targets)
 
     twoafc_score = calculate_twoafc_score(d0s, d1s, targets)
-    logging.info(f"2AFC score: {str(twoafc_score)}")
+    logging.info(f"Final 2AFC score: {str(twoafc_score)}")
     return twoafc_score
 
 

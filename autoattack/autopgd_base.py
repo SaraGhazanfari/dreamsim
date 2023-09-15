@@ -252,8 +252,7 @@ class APGDAttack():
             else:
                 raise ValueError('unknowkn loss')
 
-        # x_adv.requires_grad_()
-        x_adv[:, 0, :, :].requires_grad_()
+        x_adv.requires_grad_()
         grad = torch.zeros_like(x)
         for _ in range(self.eot_iter):
             if not self.is_tf_model:
@@ -272,6 +271,7 @@ class APGDAttack():
                 grad += grad_curr
 
         grad /= float(self.eot_iter)
+        grad[:, 1:, :, :] = 0
         grad_best = grad.clone()
 
         if self.loss in ['dlr', 'dlr-targeted']:
@@ -352,7 +352,7 @@ class APGDAttack():
                 x_adv = x_adv_1 + 0.
 
             ### get gradient
-            x_adv[:, 0, :, :].requires_grad_()
+            x_adv.requires_grad_()
             grad = torch.zeros_like(x)
             for _ in range(self.eot_iter):
                 if not self.is_tf_model:
@@ -370,7 +370,7 @@ class APGDAttack():
                     grad += grad_curr
 
             grad /= float(self.eot_iter)
-
+            grad[:, 1:, :, :] = 0
             pred = logits.detach().max(1)[1] == y
             acc = torch.min(acc, pred)
             acc_steps[i + 1] = acc + 0

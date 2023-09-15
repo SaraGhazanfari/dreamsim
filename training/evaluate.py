@@ -65,8 +65,8 @@ def model_wrapper(model, img_0, img_1):
 
     def metric_model(img):
         img_ref, index = img[:, -2], img[:, -1]
-        dist_0 = model(img_ref, img_0)
-        dist_1 = model(img_ref, img_1)
+        dist_0 = model(img_ref, img_0[index])
+        dist_1 = model(img_ref, img_1[index])
         return torch.stack((dist_1, dist_0), dim=1)
 
     return metric_model

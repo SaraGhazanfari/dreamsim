@@ -262,6 +262,7 @@ class APGDAttack():
         
         
         x_adv.requires_grad_()
+        x_adv[:,1:, :,:].requires_grad_(requires_grad=False)
         grad = torch.zeros_like(x)
         for _ in range(self.eot_iter):
             if not self.is_tf_model:
@@ -360,6 +361,7 @@ class APGDAttack():
 
             ### get gradient
             x_adv.requires_grad_()
+            x_adv[:, 1:, :, :].requires_grad_(requires_grad=False)
             grad = torch.zeros_like(x)
             for _ in range(self.eot_iter):
                 if not self.is_tf_model:

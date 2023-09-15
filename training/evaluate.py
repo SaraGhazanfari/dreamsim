@@ -64,6 +64,7 @@ def model_wrapper(model):
     soft_max = nn.Softmax(dim=1)
 
     def metric_model(img):
+        print(img.shape)
         img_ref, img_0, img_1 = img[:, 0, :, :].squeeze(1), img[:, 1, :, :].squeeze(1), img[:, 2, :, :].squeeze(1)
         dist_0 = model(img_ref, img_0)
         dist_1 = model(img_ref, img_1)

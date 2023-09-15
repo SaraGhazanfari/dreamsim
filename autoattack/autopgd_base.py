@@ -491,7 +491,6 @@ class APGDAttack():
 
             for counter in range(self.n_restarts):
                 ind_to_fool = acc.nonzero().squeeze()
-                print(ind_to_fool, 'ind_to_fool')
                 if len(ind_to_fool.shape) == 0:
                     ind_to_fool = ind_to_fool.unsqueeze(0)
                 if ind_to_fool.numel() != 0:

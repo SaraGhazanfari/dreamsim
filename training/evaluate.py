@@ -56,7 +56,7 @@ def parse_args():
     parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--batch_size', type=int, default=4, help='dataset batch size.')
     parser.add_argument('--attack_type', type=str, default=None, help='PGD-L2, PGD-Linf, AA-L2, AA-Linf')
-    parser.add_argument('--eps', type=int, default=0, help='epsilon for attack')
+    parser.add_argument('--eps', type=float, default=0, help='epsilon for attack')
     return parser.parse_args()
 
 
@@ -130,7 +130,7 @@ def score_nights_dataset(model, test_loader, device, attack_type, epsilon=0):
         d0s.append(dist_0.detach())
         d1s.append(dist_1.detach())
         targets.append(target.detach())
-        calculate_twoafc_score(d0s, d1s, targets)
+        #calculate_twoafc_score(d0s, d1s, targets)
 
     twoafc_score = calculate_twoafc_score(d0s, d1s, targets)
     logging.info(f"Final 2AFC score: {str(twoafc_score)}")

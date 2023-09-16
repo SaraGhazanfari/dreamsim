@@ -17,6 +17,7 @@ import configargparse
 from dreamsim import dreamsim
 from advertorch.attacks import L2PGDAttack, LinfPGDAttack
 from autoattack import AutoAttack
+import matplotlib.pyplot as plt
 
 log = logging.getLogger("lightning.pytorch")
 log.propagate = False
@@ -78,7 +79,8 @@ def generate_attack(attack_type, model, img_ref, img_0, img_1, target, epsilon):
         adversary.attacks_to_run = ['apgd-ce']
         img_ref = adversary.run_standard_evaluation(torch.stack((img_ref, img_0, img_1), dim=1), target.long(),
                                                     bs=img_ref.shape[0])
-        img_ref, img_0, img_1 = img_ref[:, 0, :, :].squeeze(1), img_ref[:, 1, :, :].squeeze(1), img_ref[:, 2, :, :].squeeze(1)
+        img_ref, img_0, img_1 = img_ref[:, 0, :, :].squeeze(1), img_ref[:, 1, :, :].squeeze(1), img_ref[:, 2, :,
+                                                                                                :].squeeze(1)
     elif attack_method == 'PGD':
         if attack_norm == 'L2':
             adversary = L2PGDAttack(model.embed, loss_fn=nn.MSELoss(), eps=epsilon, nb_iter=200, rand_init=True,
@@ -117,24 +119,32 @@ def score_nights_dataset(model, test_loader, device, attack_type, epsilon=0):
         img_right = img_right.detach()
         if attack_type:
             img_ref, _, _ = generate_attack(attack_type=attack_type, model=model, img_ref=img_ref, img_0=img_left,
-                                      img_1=img_right, target=target, epsilon=epsilon)
-        dist_0 = model(img_ref, img_left)
-        dist_1 = model(img_ref, img_right)
-
-        if len(dist_0.shape) < 1:
-            dist_0 = dist_0.unsqueeze(0)
-            dist_1 = dist_1.unsqueeze(0)
-        dist_0 = dist_0.unsqueeze(1)
-        dist_1 = dist_1.unsqueeze(1)
-        target = target.unsqueeze(1)
-        d0s.append(dist_0.detach())
-        d1s.append(dist_1.detach())
-        targets.append(target.detach())
-        calculate_twoafc_score(d0s, d1s, targets)
+                                            img_1=img_right, target=target, epsilon=epsilon)
+        # dist_0 = model(img_ref, img_left)
+        # dist_1 = model(img_ref, img_right)
+        #
+        # if len(dist_0.shape) < 1:
+        #     dist_0 = dist_0.unsqueeze(0)
+        #     dist_1 = dist_1.unsqueeze(0)
+        # dist_0 = dist_0.unsqueeze(1)
+        # dist_1 = dist_1.unsqueeze(1)
+        # target = target.unsqueeze(1)
+        # d0s.append(dist_0.detach())
+        # d1s.append(dist_1.detach())
+        # targets.append(target.detach())
+        # calculate_twoafc_score(d0s, d1s, targets)
+        show_images(img_ref)
+        break
 
     twoafc_score = calculate_twoafc_score(d0s, d1s, targets)
     logging.info(f"Final 2AFC score: {str(twoafc_score)}")
     return twoafc_score
+
+
+def show_images(img_ref):
+    for img in img_ref:
+        plt.imshow(img.squeeze().detach().cpu().numpy().transpose(1, 2, 0))
+        break
 
 
 def get_baseline_model(baseline_model, feat_type: str = "cls", stride: str = "16",

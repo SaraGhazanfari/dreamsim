@@ -57,7 +57,7 @@ def parse_args():
     parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--batch_size', type=int, default=4, help='dataset batch size.')
     parser.add_argument('--attack_type', type=str, default=None, help='PGD-L2, PGD-Linf, AA-L2, AA-Linf')
-    parser.add_argument('--eps', type=int, default=0, help='epsilon for attack')
+    parser.add_argument('--eps', type=float, default=0, help='epsilon for attack')
     return parser.parse_args()
 
 
@@ -79,8 +79,7 @@ def generate_attack(attack_type, model, img_ref, img_0, img_1, target, epsilon):
         adversary.attacks_to_run = ['apgd-ce']
         img_ref = adversary.run_standard_evaluation(torch.stack((img_ref, img_0, img_1), dim=1), target.long(),
                                                     bs=img_ref.shape[0])
-        img_ref, img_0, img_1 = img_ref[:, 0, :, :].squeeze(1), img_ref[:, 1, :, :].squeeze(1), img_ref[:, 2, :,
-                                                                                                :].squeeze(1)
+        img_ref, img_0, img_1 = img_ref[:, 0, :, :].squeeze(1), img_ref[:, 1, :, :].squeeze(1), img_ref[:, 2, :, :].squeeze(1)
     elif attack_method == 'PGD':
         if attack_norm == 'L2':
             adversary = L2PGDAttack(model.embed, loss_fn=nn.MSELoss(), eps=epsilon, nb_iter=200, rand_init=True,

@@ -75,11 +75,12 @@ def generate_attack(attack_type, model, img_ref, img_0, img_1, target, epsilon):
     attack_method, attack_norm = attack_type.split('-')
 
     if attack_method == 'AA':
-        adversary = AutoAttack(model_wrapper(model), norm=attack_norm, eps=epsilon, version='standard')
+        adversary = AutoAttack(model_wrapper(model), norm=attack_norm, eps=epsilon, version='standard', device=device)
         adversary.attacks_to_run = ['apgd-ce']
         img_ref = adversary.run_standard_evaluation(torch.stack((img_ref, img_0, img_1), dim=1), target.long(),
                                                     bs=img_ref.shape[0])
-        img_ref, img_0, img_1 = img_ref[:, 0, :, :].squeeze(1), img_ref[:, 1, :, :].squeeze(1), img_ref[:, 2, :, :].squeeze(1)
+        img_ref, img_0, img_1 = img_ref[:, 0, :, :].squeeze(1), img_ref[:, 1, :, :].squeeze(1), img_ref[:, 2, :,
+                                                                                                :].squeeze(1)
     elif attack_method == 'PGD':
         if attack_norm == 'L2':
             adversary = L2PGDAttack(model.embed, loss_fn=nn.MSELoss(), eps=epsilon, nb_iter=200, rand_init=True,
@@ -116,6 +117,7 @@ def score_nights_dataset(model, test_loader, device, attack_type, epsilon=0):
             img_right.to(device), target.to(device)
         img_left = img_left.detach()
         img_right = img_right.detach()
+
         if attack_type:
             img_ref, _, _ = generate_attack(attack_type=attack_type, model=model, img_ref=img_ref, img_0=img_left,
                                             img_1=img_right, target=target, epsilon=epsilon)
@@ -135,15 +137,16 @@ def score_nights_dataset(model, test_loader, device, attack_type, epsilon=0):
         show_images(img_ref)
         break
 
-    twoafc_score = calculate_twoafc_score(d0s, d1s, targets)
-    logging.info(f"Final 2AFC score: {str(twoafc_score)}")
-    return twoafc_score
+    # twoafc_score = calculate_twoafc_score(d0s, d1s, targets)
+    # logging.info(f"Final 2AFC score: {str(twoafc_score)}")
+    # return twoafc_score
 
 
 def show_images(img_ref):
-    for img in img_ref:
+    for idx, img in enumerate(img_ref):
         plt.imshow(img.squeeze().detach().cpu().numpy().transpose(1, 2, 0))
-        break
+        plt.axis('off')
+        plt.savefig(f'{idx}.pdf', format="pdf", bbox_inches='tight', pad_inches=0)
 
 
 def get_baseline_model(baseline_model, feat_type: str = "cls", stride: str = "16",
@@ -182,13 +185,13 @@ def get_baseline_model(baseline_model, feat_type: str = "cls", stride: str = "16
     elif 'clip' in baseline_model or 'dino' in baseline_model or "open_clip" in baseline_model or "mae" in baseline_model:
         perceptual_model, _ = dreamsim(pretrained=True, dreamsim_type=args.baseline_model)
         # PerceptualModel(feat_type=feat_type, model_type=baseline_model, stride=stride,
-        #                                   baseline=True, load_dir=load_dir, device=device)
+        #                                 baseline=True, load_dir=load_dir, device=device)
         for extractor in perceptual_model.extractor_list:
             extractor.model.eval()
         return perceptual_model
 
     elif baseline_model == "dreamsim":
-        dreamsim_model, preprocess = dreamsim(pretrained=True, cache_dir=load_dir)
+        dreamsim_model, preprocess = dreamsim(pretrained=True, cache_dir=load_dir, device=device)
         return dreamsim_model
 
     else:
@@ -241,32 +244,32 @@ def run(args, device):
 
     eval_results = {}
 
-    test_dataset_imagenet = TwoAFCDataset(root_dir=args.nights_root, split="test_imagenet",
+    test_dataset_imagenet = TwoAFCDataset(root_dir=args.nights_root, split="test",
                                           preprocess=get_preprocess(model_type))
-    test_dataset_no_imagenet = TwoAFCDataset(root_dir=args.nights_root, split="test_no_imagenet",
-                                             preprocess=get_preprocess(model_type))
-    total_length = len(test_dataset_no_imagenet) + len(test_dataset_imagenet)
+    # test_dataset_no_imagenet = TwoAFCDataset(root_dir=args.nights_root, split="test_no_imagenet",
+    #                                          preprocess=get_preprocess(model_type))
+    # total_length = len(test_dataset_no_imagenet) + len(test_dataset_imagenet)
     test_imagenet_loader = DataLoader(test_dataset_imagenet, batch_size=args.batch_size,
                                       num_workers=args.num_workers, shuffle=False)
-    test_no_imagenet_loader = DataLoader(test_dataset_no_imagenet, batch_size=args.batch_size,
-                                         num_workers=args.num_workers, shuffle=False)
+    # test_no_imagenet_loader = DataLoader(test_dataset_no_imagenet, batch_size=args.batch_size,
+    #                                      num_workers=args.num_workers, shuffle=False)
 
     imagenet_score = score_nights_dataset(model, test_imagenet_loader, device, args.attack_type, float(args.eps))
-    no_imagenet_score = score_nights_dataset(model, test_no_imagenet_loader, device, args.attack_type, float(args.eps))
+    # no_imagenet_score = score_nights_dataset(model, test_no_imagenet_loader, device, args.attack_type, float(args.eps))
 
-    eval_results['nights_imagenet'] = imagenet_score.item()
-    logging.info(f"Imagenet 2AFC score: {str(eval_results['nights_imagenet'])}")
-    eval_results['nights_no_imagenet'] = no_imagenet_score.item()
-    logging.info(f"No Imagenet 2AFC score: {str(eval_results['nights_no_imagenet'])}")
-    eval_results['nights_total'] = (imagenet_score.item() * len(test_dataset_imagenet) +
-                                    no_imagenet_score.item() * len(test_dataset_no_imagenet)) / total_length
-    logging.info(f"Combined 2AFC score: {str(eval_results['nights_total'])}")
-
-    logging.info(f"Saving to {os.path.join(output_path, 'eval_results.pkl')}")
-    with open(os.path.join(output_path, 'eval_results.pkl'), "wb") as f:
-        pickle.dump(eval_results, f)
-
-    print("Done :)")
+    # eval_results['nights_imagenet'] = imagenet_score.item()
+    # logging.info(f"Imagenet 2AFC score: {str(eval_results['nights_imagenet'])}")
+    # eval_results['nights_no_imagenet'] = no_imagenet_score.item()
+    # logging.info(f"No Imagenet 2AFC score: {str(eval_results['nights_no_imagenet'])}")
+    # eval_results['nights_total'] = (imagenet_score.item() * len(test_dataset_imagenet) +
+    #                                 no_imagenet_score.item() * len(test_dataset_no_imagenet)) / total_length
+    # logging.info(f"Combined 2AFC score: {str(eval_results['nights_total'])}")
+    #
+    # logging.info(f"Saving to {os.path.join(output_path, 'eval_results.pkl')}")
+    # with open(os.path.join(output_path, 'eval_results.pkl'), "wb") as f:
+    #     pickle.dump(eval_results, f)
+    #
+    # print("Done :)")
 
 
 if __name__ == "__main__":

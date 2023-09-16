@@ -27,6 +27,8 @@ class TwoAFCDataset(Dataset):
         elif split == 'test_no_imagenet':
             self.csv = self.csv[self.csv['split'] == 'test']
             self.csv = self.csv[self.csv['is_imagenet'] == False]
+        elif split == 'test':
+            self.csv = self.csv[self.csv['split'] == 'test']
         else:
             raise ValueError(f'Invalid split: {split}')
 

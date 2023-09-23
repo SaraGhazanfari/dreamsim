@@ -120,27 +120,23 @@ def score_nights_dataset(model, test_loader, device, attack_type, epsilon=0):
         if attack_type:
             adv_img_ref, _, _ = generate_attack(attack_type=attack_type, model=model, img_ref=img_ref, img_0=img_left,
                                             img_1=img_right, target=target, epsilon=epsilon)
-        # dist_0 = model(img_ref, img_left)
-        # dist_1 = model(img_ref, img_right)
-        #
-        # if len(dist_0.shape) < 1:
-        #     dist_0 = dist_0.unsqueeze(0)
-        #     dist_1 = dist_1.unsqueeze(0)
-        # dist_0 = dist_0.unsqueeze(1)
-        # dist_1 = dist_1.unsqueeze(1)
-        # target = target.unsqueeze(1)
-        # d0s.append(dist_0.detach())
-        # d1s.append(dist_1.detach())
-        # targets.append(target.detach())
-        # calculate_twoafc_score(d0s, d1s, targets)
-        show_images(adv_img_ref, batch_num=i*20)
-        print(model(adv_img_ref, img_ref))
-        break
+        dist_0 = model(img_ref, img_left)
+        dist_1 = model(img_ref, img_right)
 
+        if len(dist_0.shape) < 1:
+            dist_0 = dist_0.unsqueeze(0)
+            dist_1 = dist_1.unsqueeze(0)
+        dist_0 = dist_0.unsqueeze(1)
+        dist_1 = dist_1.unsqueeze(1)
+        target = target.unsqueeze(1)
+        d0s.append(dist_0.detach())
+        d1s.append(dist_1.detach())
+        targets.append(target.detach())
+        calculate_twoafc_score(d0s, d1s, targets)
 
-    # twoafc_score = calculate_twoafc_score(d0s, d1s, targets)
-    # logging.info(f"Final 2AFC score: {str(twoafc_score)}")
-    # return twoafc_score
+    twoafc_score = calculate_twoafc_score(d0s, d1s, targets)
+    logging.info(f"Final 2AFC score: {str(twoafc_score)}")
+    return twoafc_score
 
 
 def show_images(img_ref, batch_num=0):

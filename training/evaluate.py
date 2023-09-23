@@ -119,7 +119,7 @@ def score_nights_dataset(model, test_loader, device, attack_type, epsilon=0):
         img_right = img_right.detach()
 
         if attack_type:
-            img_ref, _, _ = generate_attack(attack_type=attack_type, model=model, img_ref=img_ref, img_0=img_left,
+            adv_img_ref, _, _ = generate_attack(attack_type=attack_type, model=model, img_ref=img_ref, img_0=img_left,
                                             img_1=img_right, target=target, epsilon=epsilon)
         # dist_0 = model(img_ref, img_left)
         # dist_1 = model(img_ref, img_right)
@@ -134,7 +134,8 @@ def score_nights_dataset(model, test_loader, device, attack_type, epsilon=0):
         # d1s.append(dist_1.detach())
         # targets.append(target.detach())
         # calculate_twoafc_score(d0s, d1s, targets)
-        show_images(img_ref)
+        show_images(adv_img_ref)
+        print(model(adv_img_ref, img_ref))
         break
 
     # twoafc_score = calculate_twoafc_score(d0s, d1s, targets)

@@ -117,7 +117,7 @@ def score_nights_dataset(model, test_loader, device, attack_type, epsilon=0):
             img_right.to(device), target.to(device)
         img_left = img_left.detach()
         img_right = img_right.detach()
-        if i >= 2:
+        if i >= 3:
             break
         if attack_type:
             adv_img_ref, _, _ = generate_attack(attack_type=attack_type, model=model, img_ref=img_ref, img_0=img_left,

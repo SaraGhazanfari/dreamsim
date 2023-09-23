@@ -135,7 +135,7 @@ def score_nights_dataset(model, test_loader, device, attack_type, epsilon=0):
         # d1s.append(dist_1.detach())
         # targets.append(target.detach())
         # calculate_twoafc_score(d0s, d1s, targets)
-        show_images(adv_img_ref, batch_num=i)
+        show_images(adv_img_ref, batch_num=i*20)
         print(model(adv_img_ref, img_ref))
 
 

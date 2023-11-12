@@ -1,5 +1,7 @@
 from pytorch_lightning import seed_everything
 import torch
+
+from dataset.bapps_dataset import BAPPSDataset
 from dataset.dataset import TwoAFCDataset
 from util.utils import get_preprocess
 from torch.utils.data import DataLoader
@@ -84,9 +86,9 @@ def score_nights_dataset(model, test_loader, device):
     d0s = torch.cat(d0s, dim=0)
     d1s = torch.cat(d1s, dim=0)
     targets = torch.cat(targets, dim=0)
-    twoafc_score = get_2afc_score(d0s, d1s, targets)
+    twoafc_score, count = get_2afc_score(d0s, d1s, targets)
     logging.info(f"2AFC score: {str(twoafc_score)}")
-    return twoafc_score
+    return twoafc_score, count
 
 
 def get_2afc_score(d0s, d1s, targets):
@@ -102,7 +104,7 @@ def get_2afc_score(d0s, d1s, targets):
     twoafc_score = scores / count
     # scores = (d0s < d1s) * (1.0 - targets) + (d1s < d0s) * targets + (d1s == d0s) * 0.5
     # twoafc_score = torch.mean(scores, dim=0)
-    return twoafc_score
+    return twoafc_score, count
 
 
 def get_baseline_model(baseline_model, feat_type: str = "cls", stride: str = "16",
@@ -200,23 +202,31 @@ def run(args, device):
 
     eval_results = {}
 
-    test_dataset_imagenet = TwoAFCDataset(root_dir=args.nights_root, split="test_imagenet",
-                                          preprocess=get_preprocess(model_type))
-    test_dataset_no_imagenet = TwoAFCDataset(root_dir=args.nights_root, split="test_no_imagenet",
-                                             preprocess=get_preprocess(model_type))
-    total_length = len(test_dataset_no_imagenet) + len(test_dataset_imagenet)
-    test_imagenet_loader = DataLoader(test_dataset_imagenet, batch_size=args.batch_size,
-                                      num_workers=args.num_workers, shuffle=False)
-    test_no_imagenet_loader = DataLoader(test_dataset_no_imagenet, batch_size=args.batch_size,
-                                         num_workers=args.num_workers, shuffle=False)
+    # test_dataset_imagenet = TwoAFCDataset(root_dir=args.nights_root, split="test_imagenet",
+    #                                       preprocess=get_preprocess(model_type))
+    # test_dataset_no_imagenet = TwoAFCDataset(root_dir=args.nights_root, split="test_no_imagenet",
+    #                                          preprocess=get_preprocess(model_type))
+    # total_length = len(test_dataset_no_imagenet) + len(test_dataset_imagenet)
+    # test_imagenet_loader = DataLoader(test_dataset_imagenet, batch_size=args.batch_size,
+    #                                   num_workers=args.num_workers, shuffle=False)
+    # test_no_imagenet_loader = DataLoader(test_dataset_no_imagenet, batch_size=args.batch_size,
+    #                                      num_workers=args.num_workers, shuffle=False)
 
-    imagenet_score = score_nights_dataset(model, test_imagenet_loader, device)
-    no_imagenet_score = score_nights_dataset(model, test_no_imagenet_loader, device)
+    test_imagenet_loader, _ = BAPPSDataset(data_dir=args.nights_root, load_size=224,
+                                  split='val', dataset='traditional', make_path=True).get_dataloader(
+        batch_size=args.batch_size)
+
+    test_no_imagenet_loader, _ = BAPPSDataset(data_dir=args.nights_root, load_size=224,
+                                  split='val', dataset='cnn', make_path=True).get_dataloader(
+        batch_size=args.batch_size)
+
+    imagenet_score, imagenet_count = score_nights_dataset(model, test_imagenet_loader, device)
+    no_imagenet_score, no_imagenet_count = score_nights_dataset(model, test_no_imagenet_loader, device)
 
     eval_results['nights_imagenet'] = imagenet_score.item()
     eval_results['nights_no_imagenet'] = no_imagenet_score.item()
-    eval_results['nights_total'] = (imagenet_score.item() * len(test_dataset_imagenet) +
-                                    no_imagenet_score.item() * len(test_dataset_no_imagenet)) / total_length
+    eval_results['nights_total'] = (imagenet_score.item() * imagenet_count +
+                                    no_imagenet_score.item() * no_imagenet_count) / (imagenet_count+no_imagenet_count)
     logging.info(f"Combined 2AFC score: {str(eval_results['nights_total'])}")
 
     logging.info(f"Saving to {os.path.join(output_path, 'eval_results.pkl')}")

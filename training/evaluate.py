@@ -61,6 +61,7 @@ def score_nights_dataset(model, test_loader, device):
     d0s = []
     d1s = []
     targets = []
+    model = model.to(device)
     with torch.no_grad():
         for i, (img_ref, img_left, img_right, target, idx) in tqdm(enumerate(test_loader), total=len(test_loader)):
             img_ref, img_left, img_right, target = img_ref.to(device), img_left.to(device), \

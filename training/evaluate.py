@@ -46,7 +46,7 @@ def parse_args():
     parser.add_argument('--baseline_stride', type=str,
                         help='Stride of first convolution layer the model (should match patch size). If finetuning'
                              'an ensemble, pass a comma-separated list (same length as model_type).')
-    parser.add_argument('--baseline_output_path', type=str,  help='Path to save evaluation results.')
+    parser.add_argument('--baseline_output_path', type=str, help='Path to save evaluation results.')
 
     ## Dataset options
     parser.add_argument('--nights_root', type=str, default='./dataset/nights', help='path to nights dataset.')
@@ -61,7 +61,7 @@ def score_nights_dataset(model, test_loader, device):
     d0s = []
     d1s = []
     targets = []
-    model = model.to(device)
+    model.net = model.net.to(device)
     with torch.no_grad():
         for i, (img_ref, img_left, img_right, target, idx) in tqdm(enumerate(test_loader), total=len(test_loader)):
             img_ref, img_left, img_right, target = img_ref.to(device), img_left.to(device), \
@@ -84,9 +84,24 @@ def score_nights_dataset(model, test_loader, device):
     d0s = torch.cat(d0s, dim=0)
     d1s = torch.cat(d1s, dim=0)
     targets = torch.cat(targets, dim=0)
-    scores = (d0s < d1s) * (1.0 - targets) + (d1s < d0s) * targets + (d1s == d0s) * 0.5
-    twoafc_score = torch.mean(scores, dim=0)
+    twoafc_score = get_2afc_score(d0s, d1s, targets)
     logging.info(f"2AFC score: {str(twoafc_score)}")
+    return twoafc_score
+
+
+def get_2afc_score(d0s, d1s, targets):
+    count = 0
+    scores = 0
+
+    for idx, target in enumerate(targets):
+        if target != 0.5:
+            count += 1
+            scores += (d0s[idx] < d1s[idx]) * (1.0 - target) + (d1s[idx] < d0s[idx]) * target + (
+                    d1s[idx] == d0s[idx]) * 0.5
+
+    twoafc_score = scores / count
+    # scores = (d0s < d1s) * (1.0 - targets) + (d1s < d0s) * targets + (d1s == d0s) * 0.5
+    # twoafc_score = torch.mean(scores, dim=0)
     return twoafc_score
 
 
@@ -95,11 +110,13 @@ def get_baseline_model(baseline_model, feat_type: str = "cls", stride: str = "16
     if baseline_model == 'psnr':
         def psnr_func(im1, im2):
             return -peak_signal_noise_ratio(im1, im2, data_range=1.0, dim=(1, 2, 3), reduction='none')
+
         return psnr_func
 
     elif baseline_model == 'ssim':
         def ssim_func(im1, im2):
             return -structural_similarity_index_measure(im1, im2, data_range=1.0, reduction='none')
+
         return ssim_func
 
     elif baseline_model == 'dists':
@@ -108,6 +125,7 @@ def get_baseline_model(baseline_model, feat_type: str = "cls", stride: str = "16
         def dists_func(im1, im2):
             distances = dists_metric(im1, im2)
             return distances
+
         return dists_func
 
     elif baseline_model == 'lpips':
@@ -117,6 +135,7 @@ def get_baseline_model(baseline_model, feat_type: str = "cls", stride: str = "16
         def lpips_func(im1, im2):
             distances = lpips_fn(im1.to(device), im2.to(device)).reshape(-1)
             return distances
+
         return lpips_func
 
     elif 'clip' in baseline_model or 'dino' in baseline_model or "open_clip" in baseline_model or "mae" in baseline_model:

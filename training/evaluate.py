@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 import os
 import yaml
 import logging
-from train import LightningPerceptualModel
+from training.train import LightningPerceptualModel
 from torchmetrics.functional import structural_similarity_index_measure, peak_signal_noise_ratio
 from DISTS_pytorch import DISTS
 from dreamsim import PerceptualModel

@@ -61,7 +61,7 @@ def score_nights_dataset(model, test_loader, device):
     d0s = []
     d1s = []
     targets = []
-    model.net = model.net.to(device)
+
     with torch.no_grad():
         for i, (img_ref, img_left, img_right, target, idx) in tqdm(enumerate(test_loader), total=len(test_loader)):
             img_ref, img_left, img_right, target = img_ref.to(device), img_left.to(device), \
@@ -131,7 +131,7 @@ def get_baseline_model(baseline_model, feat_type: str = "cls", stride: str = "16
     elif baseline_model == 'lpips':
         import lpips
         lpips_fn = lpips.LPIPS(net='alex').eval()
-
+        lpips_fn.net = lpips_fn.net.to(device)
         def lpips_func(im1, im2):
             distances = lpips_fn(im1.to(device), im2.to(device)).reshape(-1)
             return distances

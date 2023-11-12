@@ -131,6 +131,7 @@ def get_baseline_model(baseline_model, feat_type: str = "cls", stride: str = "16
     elif baseline_model == 'lpips':
         import lpips
         lpips_fn = lpips.LPIPS(net='alex').eval()
+        lpips_fn = lpips_fn.to(device)
         lpips_fn.net = lpips_fn.net.to(device)
         def lpips_func(im1, im2):
             distances = lpips_fn(im1.to(device), im2.to(device)).reshape(-1)
